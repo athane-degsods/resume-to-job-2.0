@@ -1,0 +1,6 @@
+streamlit
+pandas
+prisma
+requests
+sentence-transformers
+pypdf
