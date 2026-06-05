@@ -1,0 +1,18 @@
+services:
+  resume-to-job:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-2.0}
+    image: resume-to-job:${APP_VERSION:-2.0}
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      JOB_DB_PATH: /app/data/jobs.db
+    restart: unless-stopped

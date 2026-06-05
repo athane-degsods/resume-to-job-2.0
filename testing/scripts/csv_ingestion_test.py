@@ -12,6 +12,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.adapters.inbound.file_upload.dataframe_job_parser import DataFrameJobParser
+from src.adapters.outbound.embedding.sentence_transformers_adapter import (
+    SentenceTransformersEmbeddingAdapter,
+)
 from src.application.use_cases.ingest_jobs_batch import IngestJobsBatchUseCase
 from src.adapters.outbound.persistence.sqlite_job_repository import SQLiteJobRepository
 
@@ -30,7 +33,10 @@ def main() -> None:
         db_path.unlink()
 
     repo = SQLiteJobRepository(db_path)
-    usecase = IngestJobsBatchUseCase(repository=repo, batch_size=200)
+    embedding_service = SentenceTransformersEmbeddingAdapter()
+    usecase = IngestJobsBatchUseCase(
+        repository=repo, batch_size=200, embedding_service=embedding_service
+    )
 
     result = usecase.execute(jobs)
     print("ingest result:", result)

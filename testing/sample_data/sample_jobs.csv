@@ -1,11 +1,11 @@
-id,title,company,location,source
-JOB-001,Data Scientist,Acme Analytics,Remote,import
-JOB-002,ML Engineer,Nova AI,New York,import
-JOB-003,NLP Engineer,Lingua Labs,San Francisco,import
-JOB-004,Data Engineer,DataWorks,London,import
-JOB-005,Research Scientist,DeepLabs,Berlin,import
-JOB-006,AI Product Manager,ProdAI,Remote,import
-JOB-007,ML Ops Engineer,Opsly,Seattle,import
-JOB-008,Computer Vision Engineer,VisionX,Austin,import
-JOB-009,Data Analyst,InsightCo,Chicago,import
-JOB-010,Backend Engineer,StackCorp,Remote,import
+id,title,company,description,location,source
+JOB-001,Data Scientist,Acme Analytics,Analyze product usage data and build forecasting models with Python and SQL.,Remote,import
+JOB-002,ML Engineer,Nova AI,Build training pipelines deploy ranking models and run MLOps workflows.,New York,import
+JOB-003,NLP Engineer,Lingua Labs,Design NLP pipelines for text classification and semantic search.,San Francisco,import
+JOB-004,Data Engineer,DataWorks,Build ETL pipelines and warehouse integrations for analytics teams.,London,import
+JOB-005,Research Scientist,DeepLabs,Conduct deep learning research on representation learning.,Berlin,import
+JOB-006,AI Product Manager,ProdAI,Define AI product roadmaps and work with engineering on LLM features.,Remote,import
+JOB-007,ML Ops Engineer,Opsly,Operate model deployment monitoring and CI for machine learning systems.,Seattle,import
+JOB-008,Computer Vision Engineer,VisionX,Train and deploy computer vision models for industrial inspection.,Austin,import
+JOB-009,Data Analyst,InsightCo,Create dashboards reports and SQL analysis for business stakeholders.,Chicago,import
+JOB-010,Backend Engineer,StackCorp,Build REST APIs microservices and database layers for web products.,Remote,import

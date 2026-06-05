@@ -1,331 +1,181 @@
-## resume-to-job-2.0
+# resume-to-job-2.0
 
-## Introduction
+Streamlit application that ingests job listings, embeds descriptions with a local model, ranks jobs against a resume (cosine similarity), and optionally scores the resume plus top job picks via an OpenAI-compatible LLM API (e.g. Google Gemini).
 
-This is an application leverage the usage of LLMs to help job seekers to find the best job for them. The application is built using Streamlit, a popular framework for creating interactive web applications in Python. The main goal of this application is to provide a user-friendly interface that allows users to input their resume and receive personalized job recommendations based on their skills, experience, and preferences.
+**Version line:** `2.0` (see `APP_VERSION` / home page). Planned releases: `2.1`, `2.2`, … as features and deployment mature.
 
+---
 
+## Current features (2.0)
 
-## Stacks
+| Area | Status |
+|------|--------|
+| **Data Ingestion** | CSV upload; API fetch with configurable limit (up to **500** jobs) |
+| **Embeddings** | `all-MiniLM-L6-v2` on job `description` at ingest time |
+| **Dashboard** | KPIs + job table, **10 jobs per page** with Previous/Next |
+| **Job Matching** | PDF resume → cosine **Find Matches** → **Get AI Recommendations** on filtered jobs only |
+| **Observability** | JSON logs on ingest / match / AI ([testing/OBSERVABILITY.md](testing/OBSERVABILITY.md)) |
+| **Offline eval** | `testing/scripts/pipeline_eval.py` |
+| **Storage** | SQLite (`data/jobs.db` by default) |
+| **Container deploy** | Scaffolding only — [DEPLOYMENT.md](DEPLOYMENT.md) |
+| **Resume Builder** | Removed from scope |
+| **Web scraper / PostgreSQL** | Documented as future / alternate adapters |
 
-- Python
-- Streamlit
-- PostgreSQL
-- Prisma
+---
 
-## Architecture
-
-Implementing a hexagonal architecture, the application is structured into three main components:
-
-1. **Core Business Logic**: This is the domain center. It should contain the rules for job ingestion, validation, normalization, deduplication, schema mapping, and upsert decisions. It must not know whether the data came from an API, a CSV file, or a scraper.
-
-2. **Ports**: These are the contracts the core depends on. In this project, the important ports are the job repository port, the ingestion source port, and the notification/logging port. The core calls these interfaces; it does not call databases or external APIs directly.
-
-3. **Adapters**: These are the concrete implementations around the core. They translate the outside world into the core's language and translate core output into external systems like a relational database, a REST API, a file parser, or a scraper.
-
-### Hexagonal Mapping
-
-```mermaid
-flowchart LR
-	U[User / Scheduler / External System] --> A1[Inbound Adapter: Streamlit Page]
-	U --> A2[Inbound Adapter: File Upload]
-	U --> A3[Inbound Adapter: API Provider]
-	U --> A4[Inbound Adapter: Web Scraper]
-
-	A1 --> P1[Port: Ingestion Use Case]
-	A2 --> P1
-	A3 --> P1
-	A4 --> P1
-
-	P1 --> C[Core Domain: Validate, Normalize, Deduplicate, Map to Schema]
-	C --> P2[Port: Job Repository]
-	C --> P3[Port: Ingestion Logger / Event Publisher]
-
-	P2 --> O1[Outbound Adapter: Relational Database]
-	P3 --> O2[Outbound Adapter: Logs / Events / Monitoring]
-
-	O1 --> DB[(Jobs Table)]
-	O2 --> OBS[Observability]
-```
-
-### Ingestion Flow
-
-```mermaid
-flowchart TD
-	API[API Provider JSON] --> P1[Inbound Adapter]
-	FILE[CSV / XLSX File] --> P2[Inbound Adapter]
-	SCRAPE[HTML / Auth Scraper] --> P3[Inbound Adapter]
-
-	P1 --> USE[Ingestion Use Case]
-	P2 --> USE
-	P3 --> USE
-
-	USE --> V[Validate]
-	V --> N[Normalize]
-	N --> D[Deduplicate]
-	D --> S[Map to Relational Schema]
-	S --> R[Repository Port]
-	R --> DB[(Relational Database)]
-```
-
-### Detailed Layer Mapping
-
-#### Core business
-
-- Job entity and value objects
-- Validation rules for job records
-- Normalization rules for titles, companies, locations, and timestamps
-- Deduplication rules for repeated jobs
-- Upsert decision logic for insert vs update
-- Schema mapping from the domain model to the database model
-
-#### Ports
-
-- `JobIngestionUseCase`: receives a batch or single job record and orchestrates the ingestion flow
-- `JobRepository`: defines `upsert`, `find`, and `exists` operations for the relational database
-- `JobSource`: defines how a source provides jobs to the core
-- `IngestionLogger`: defines how ingestion results are reported
-
-#### Adapters
-
-- Streamlit UI page: starts ingestion manually and shows results
-- File upload adapter: reads CSV or XLSX and converts rows into domain input
-- API adapter: reads JSON from an external provider and converts it into domain input
-- Web scraping adapter: extracts HTML data and converts it into domain input
-- SQL repository adapter: writes the final job data into the relational database
-
-### How Your Three Ingestion Paths Fit
-
-1. **API provider**: `JSON -> API adapter -> ingestion use case -> repository port -> database adapter`
-
-2. **File upload**: `.csv / .xlsx -> file adapter -> ingestion use case -> repository port -> database adapter`
-
-3. **Web scraping**: `HTML -> scraper adapter -> ingestion use case -> repository port -> database adapter`
-
-### What Should Stay in the Core
-
-The core should own the business decisions only. For this project, that means the core decides how a job is cleaned, validated, matched to the schema, and upserted. The core should not know about Streamlit, Pandas, HTTP clients, browser scraping, or SQLite details.
-
-### What Should Stay Outside the Core
-
-Anything that depends on the outside world belongs in an adapter: user interface, file parsing, network calls, scraping, database access, and logging infrastructure.
-
-![1780005528593](image/README/1780005528593.png)
-
-
-## How to run streamlit app
+## Quick start
 
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Pages in Streamlit
+Open http://localhost:8501 and use the sidebar:
 
-Pages can be found in the `pages` folder, which contains different Python files representing different pages of the Streamlit application. Each file corresponds to a specific page, and the content of each page is defined within its respective file. The main `app.py` file serves as the entry point for the Streamlit application, and it can include navigation logic to switch between different pages based on user interactions.
+1. **Data Ingestion** — load jobs  
+2. **Dashboard** — verify stored jobs  
+3. **Job Matching** — resume upload, match, AI recommendations  
 
+---
 
-## Data ingestion
-
-Upserting job data into the database can be achieved through three main methods:
-
-1. API provider (UnAuth) - JSON -> data ingestion adapters -> application use case -> domain rules -> repository adapter -> PostgreSQL
-
-2. File upload (UnAuth) -.csv/.xlsx -> data ingestion adapters -> application use case -> domain rules -> repository adapter -> PostgreSQL
-
-3. Web scraping (Auth) - HTML -> data ingestion adapters -> application use case -> domain rules -> repository adapter -> PostgreSQL
-
-### Data Ingestion Folder Tree
-
-```text
-src/
-	domain/
-		entities/
-		value_objects/
-		services/
-	application/
-		use_cases/
-		dto/
-	ports/
-		input/
-		output/
-	adapters/
-		inbound/
-			streamlit/
-			api_provider/
-			file_upload/
-			web_scraper/
-		outbound/
-			persistence/
-			logging/
-```
-
-### Hexagonal View of Data Ingestion
+## User workflow
 
 ```mermaid
 flowchart LR
-	UI[Streamlit UI] --> IN1[Inbound Adapter: Streamlit]
-	API[API Provider JSON] --> IN2[Inbound Adapter: API Provider]
-	FILE[CSV / XLSX] --> IN3[Inbound Adapter: File Upload]
-	HTML[HTML / Auth Scraper] --> IN4[Inbound Adapter: Web Scraper]
-
-	IN1 --> UC[Application Use Case: Ingest Jobs]
-	IN2 --> UC
-	IN3 --> UC
-	IN4 --> UC
-
-	UC --> DOM[Domain: Validate, Normalize, Deduplicate, Upsert Rules]
-	DOM --> OUT1[Output Port: Job Repository]
-	DOM --> OUT2[Output Port: Ingestion Logger]
-
-	OUT1 --> DB[Outbound Adapter: PostgreSQL]
-	OUT2 --> LOG[Outbound Adapter: Logging]
+  ING[Data Ingestion] --> DASH[Dashboard]
+  DASH --> MATCH[Job Matching]
+  MATCH --> COS[Find Matches]
+  COS --> AI[Get AI Recommendations]
 ```
 
-In this section, your "data processing" is split into two parts:
+### Data Ingestion
 
-- **Adapters**: read and translate API, file, HTML, or UI input into a common structure.
-- **Application and domain**: orchestrate the ingestion flow and enforce the business rules.
+- **CSV:** columns `id`, `title`, `company`, `description` (required); optional `location`, `source`.  
+- **API:** endpoint + optional API key. Choose **how many jobs to load** (1–**500**, default **500**). The client **follows pagination** when the provider exposes a next page (e.g. Arbeitnow returns ~**100 jobs per page**). Invalid rows (e.g. missing description) are reported and skipped.  
+- **Ingest:** embeds all loaded valid jobs, then saves to SQLite in **write batches of 200** (see [Ingest batch size](#ingest-batch-size) below).
 
-This split keeps the database choice and the input format separate from the business rules.
+Test API (ArbeitNow): `https://www.arbeitnow.com/api/job-board-api`
 
-### What each folder does
+### Dashboard
 
-- `domain/entities`: job and ingestion business objects
-- `domain/value_objects`: small validated fields such as job title, company name, location, and source
-- `domain/services`: pure business rules that do not fit inside a single entity
-- `application/use_cases`: ingestion orchestration
-- `application/dto`: input and output models for the use case
-- `ports/input`: interfaces the UI or adapters call
-- `ports/output`: interfaces the core uses to save data or emit logs
-- `adapters/inbound/*`: Streamlit, API, file, and scraper entry points
-- `adapters/outbound/persistence`: SQLite implementation for local testing
-- `adapters/outbound/logging`: logging or monitoring implementation
+- Metrics: total jobs, with / without embeddings.  
+- Paginated table: 10 rows per page, **Previous page** / **Next page**.
 
-### 1. Data Route and Types for File Upload Ingestion
+### Job Matching
 
-```mermaid
-flowchart LR
-	UF["pages/Data_Ingestion.py\nstreamlit_adapter.py\nUploadedFile / UI input"] --> DF["dataframe_job_parser.py\npandas.DataFrame"]
-	DF --> RD["dataframe_job_parser.py\nlist of dict records"]
-	RD --> J["dataframe_job_parser.py\nlist of Job entities"]
-	J --> B["ingest_jobs_batch.py\nJob batches of 200"]
-	B --> P["job_repository.py\nJobRepositoryPort"]
-	P --> PR["sqlite_job_repository.py\nSQLiteJobRepository"]
-	PR --> SQL["schema.sql\nSQLite jobs table"]
-```
+1. Upload PDF resume (text + embedding extracted).  
+2. Set cosine shortlist size → **Find Matches**.  
+3. **Get AI Recommendations** (requires API key in UI or env) — AI only sees jobs from step 2; up to 3 recommendations (fewer if shortlist &lt; 3).
 
-The type or abstraction changes at each step:
+**Google AI Studio:** set API base to `https://generativelanguage.googleapis.com/v1beta/openai`, model e.g. `gemini-2.0-flash`, key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey). See [Gemini OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai).
 
-1. UI or uploaded file object -> `UploadedFile` or widget input in `pages/Data_Ingestion.py` or `streamlit_adapter.py`
-2. Parsed table -> `pandas.DataFrame` in `dataframe_job_parser.py`
-3. Normalized rows -> `list[dict[str, object]]` in `dataframe_job_parser.py`
-4. Domain objects -> `list[Job]` in `dataframe_job_parser.py`
-5. Batch abstraction -> `Job` chunks of `200` in `ingest_jobs_batch.py`
-6. Output port -> `JobRepositoryPort` in `job_repository.py`
-7. Concrete adapter -> `SQLiteJobRepository` in `sqlite_job_repository.py`
-8. Storage -> SQLite table rows defined by `schema.sql`
+---
 
+## Configuration
 
-### 2. Data Route and Types for API Provider Ingestion
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `JOB_DB_PATH` | SQLite file | `data/jobs.db` |
+| `API_JOB_LIMIT` | Default API fetch limit in UI | `500` |
+| `JOB_API_KEY` | Optional key for job board API | — |
+| `AI_API_KEY` / `GEMINI_API_KEY` | LLM recommendations | — |
+| `AI_API_BASE` | OpenAI-compatible base URL | OpenAI or Gemini URL in UI |
+| `AI_MODEL` | Model name | `gpt-4o-mini` / `gemini-2.0-flash` in UI |
+| `APP_VERSION` | Shown on home (Docker build arg) | `dev` |
+| `LOG_LEVEL` | Structured log level | `INFO` |
 
-This route is the next planned inbound path. It should use an API key only,
-without user authentication, and it should reuse the same ingestion use case
-and repository port as the file-upload route.
+Copy [.env.example](.env.example) to `.env` for local overrides.
 
-```mermaid
-flowchart LR
-	API["External API\nAPI key only"] --> RAW["api_client.py\nJSON payload"]
-	RAW --> REC["api_job_parser.py\nlist of dict records"]
-	REC --> J["api_job_parser.py\nlist of Job entities"]
-	J --> B["ingest_jobs_batch.py\nJob batches of 200"]
-	B --> P["job_repository.py\nJobRepositoryPort"]
-	P --> DB["sqlite_job_repository.py\nSQLiteJobRepository"]
-```
+---
 
-The type or abstraction changes at each step:
+## Ingest batch size
 
-1. External request -> `API key`-protected HTTP call in `api_client.py`
-2. Provider response -> `JSON payload` in `api_client.py`
-3. Parsed payload -> `list[dict]` in `api_job_parser.py`
-4. Domain objects -> `list[Job]` in `api_job_parser.py`
-5. Batch abstraction -> `Job` chunks of `200` in `ingest_jobs_batch.py`
-6. Output port -> `JobRepositoryPort` in `job_repository.py`
-7. Concrete adapter -> `SQLiteJobRepository` for local testing
-8. Storage -> rows in the jobs table
+`IngestJobsBatchUseCase` uses **batch size 200** for **SQLite writes only**:
 
-Notes for the API route:
+- All unique jobs in one ingest run are **embedded in a single** `embed_texts` call.  
+- Jobs are then saved with `upsert_many` in chunks of 200 (e.g. 500 jobs → 3 DB batches: 200 + 200 + 100).  
+- There is **no** 200-job cap on how many jobs you can ingest.
 
-- Keep the API key in environment variables or Streamlit secrets.
-- Do not move API authentication into the domain layer.
-- Map provider-specific JSON into the same `Job` model used by the file route.
-- Reuse `IngestJobsBatchUseCase` so both routes follow the same core logic.
+---
 
-Notes for the API route:
+## Observability and evaluation
 
-Implementation notes:
-- Inbound HTTP client: `src/adapters/inbound/api_provider/api_client.py` fetches JSON from provider endpoints (API key via env var or UI input).
-- Parser: `src/adapters/inbound/api_provider/api_job_parser.py` maps provider JSON (e.g., ArbeitNow) into `list[dict]` records and converts to `list[Job]`.
-- Tolerance: parser collects per-record validation errors using the tolerant methods in the dataframe parser (`to_jobs_with_errors_from_records`) so invalid rows are reported but valid rows can still be ingested.
-- UI: `src/adapters/inbound/streamlit/streamlit_adapter.py` exposes an "API endpoint" ingestion option (enter endpoint + API key), previews parsed records, shows a table of invalid rows when present, and calls `IngestJobsBatchUseCase` to persist valid jobs.
-- Persistence: default local store is SQLite via `src/adapters/outbound/persistence/sqlite_job_repository.py` (DB file: `data/jobs.db`). The repo implements `upsert_many()` and a convenience `count()`.
-- Raw payload: parser keeps the original record under the `raw` key to aid debugging; you may drop or persist it based on your needs.
+- **Runtime:** JSON line logs from use cases (ingest, match, AI).  
+- **Offline:** `python testing/scripts/pipeline_eval.py` (optional `--run-ai` if API key set).  
 
-Quick test / housekeeping commands:
+Details: [testing/OBSERVABILITY.md](testing/OBSERVABILITY.md)
 
-Create DB and run demo insertion (inserts two demo jobs):
-```bash
-./.venv/Scripts/python.exe - <<'PY'
-from src.adapters.inbound.streamlit.streamlit_adapter import run_demo
-run_demo()
-PY
-```
-
-Clear the `jobs` table:
 ```bash
 python testing/scripts/clear_jobs_table.py
+python testing/scripts/pipeline_eval.py
 ```
 
-Default DB location can be overridden with `JOB_DB_PATH` environment variable or by changing `JOB_DB_PATH` in the Streamlit UI config.
+Sample fixtures: `testing/sample_data/sample_jobs.csv`, `sample_resume.txt`.
 
-#### API source: https://www.arbeitnow.com/blog/job-board-api (test)
+---
 
-The API endpoint: `https://www.arbeitnow.com/api/job-board-api`  
+## Architecture (hexagonal)
 
-## Data embeddings and Similarity Search
+```text
+pages/ (Streamlit)  →  adapters/inbound/streamlit|api_provider|file_upload
+                    →  application/use_cases
+                    →  domain/entities|services
+                    →  ports/output
+                    →  adapters/outbound/persistence|embedding|llm|logging
+```
 
-### 1. Data Embeddings
+**Implemented outbound adapters:** SQLite job repository, Sentence Transformers embeddings, OpenAI-compatible LLM, structured logging.
 
-The current application generates embeddings from the job `description` field after ingestion starts. This is handled in the application layer so both CSV and API routes follow the same rule set.
+**Planned:** web scraper inbound, PostgreSQL/Prisma (README legacy), full Kubernetes operations.
+
+### API ingestion path
 
 ```mermaid
 flowchart LR
-	IN["Ingested jobs"] --> UC["ingest_jobs_batch.py"]
-	UC --> EMB["sentence_transformers_adapter.py"]
-	EMB --> JOB["Job entities with embedding"]
-	JOB --> DB["sqlite_job_repository.py"]
+  API[HTTP JSON] --> CLIENT[api_client.py]
+  CLIENT --> PARSE[api_job_parser.py]
+  PARSE --> LIMIT[limit N ≤ 500]
+  LIMIT --> UC[ingest_jobs_batch.py]
+  UC --> EMB[sentence_transformers]
+  EMB --> DB[(SQLite)]
 ```
 
-The type or abstraction changes at each step:
+---
 
-1. Ingested input -> `list[Job]`
-2. Embedding input -> each job `description`
-3. Embedding service -> `SentenceTransformersEmbeddingAdapter`
-4. Embedding output -> `list[list[float]]`
-5. Enriched jobs -> `Job` entities with `embedding`
-6. Storage -> SQLite `jobs` table with an `embedding` JSON column
+## Project layout
 
-Current rules:
+```text
+app.py                 # Home + logging setup
+pages/                 # Data_Ingestion, Dashboard, Job_Matching
+src/
+  domain/              # Job, Resume, similarity, Recommendation
+  application/use_cases/
+  ports/output/
+  adapters/inbound/      # streamlit, api_provider, file_upload
+  adapters/outbound/     # persistence, embedding, llm, logging
+data/jobs.db             # Created at runtime (gitignored)
+testing/                 # scripts, sample_data, output reports
+Dockerfile               # Planned deployment (see DEPLOYMENT.md)
+```
 
-- `description` is mandatory.
-- Records without `description` are discarded before embedding.
-- The UI only triggers ingestion.
-- The use case owns the embedding call, so the same behavior is reused across inbound adapters.
+---
 
-Implementation details:
+## Container deployment (planned)
 
-- Embedding adapter: `src/adapters/outbound/embedding/sentence_transformers_adapter.py`
-- Application use case: `src/application/use_cases/ingest_jobs_batch.py`
-- Database field: `embedding` in `src/adapters/outbound/persistence/sqlite_job_repository.py`
+Docker files support **2.0 → 2.1 → 2.2** image tags when the app is ready to ship. Not required for local development. See [DEPLOYMENT.md](DEPLOYMENT.md).
 
-### 2. PDF resume parsing
+---
+
+## Roadmap
+
+- **2.0 (current):** ingest, dashboard, cosine match, filtered AI recommendations, logging, eval script.  
+- **2.1+:** container release, optional metrics export, PostgreSQL or scraper if required by rubric.  
+- **Later:** Kubernetes (same image), richer monitoring (Prometheus/MLflow) if needed.
+
+---
+
+## Legacy design notes
+
+Older sections in git history described PostgreSQL, Prisma, Resume Builder, and three ingestion paths including scraping. The running app uses **SQLite** and the flows documented above; PostgreSQL and scraper remain architectural targets, not the current runtime.
+
+![Architecture diagram](image/README/1780005528593.png)

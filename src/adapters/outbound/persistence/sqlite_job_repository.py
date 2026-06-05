@@ -112,3 +112,53 @@ class SQLiteJobRepository(JobRepositoryPort):
         cur.execute("SELECT COUNT(*) FROM jobs")
         row = cur.fetchone()
         return int(row[0]) if row is not None else 0
+
+    def find_all(self) -> list[Job]:
+        return self.find_page(offset=0, limit=max(self.count(), 1) if self.count() > 0 else 0)
+
+    def count_with_embeddings(self) -> int:
+        cur = self._conn.cursor()
+        cur.execute(
+            """
+            SELECT COUNT(*) FROM jobs
+            WHERE embedding IS NOT NULL AND TRIM(embedding) != ''
+            """
+        )
+        row = cur.fetchone()
+        return int(row[0]) if row is not None else 0
+
+    def find_page(self, *, offset: int, limit: int) -> list[Job]:
+        if limit < 1:
+            return []
+        cur = self._conn.cursor()
+        cur.execute(
+            """
+            SELECT id, title, company, description, location, source, embedding
+            FROM jobs
+            ORDER BY updated_at DESC, title ASC, id ASC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, max(offset, 0)),
+        )
+        return [self._row_to_job(row) for row in cur.fetchall()]
+
+    def _row_to_job(self, row: sqlite3.Row) -> Job:
+        embedding_raw = row["embedding"]
+        embedding = None
+        if embedding_raw:
+            parsed = json.loads(embedding_raw)
+            embedding = tuple(float(value) for value in parsed)
+
+        description = row["description"]
+        if not description:
+            description = ""
+
+        return Job(
+            id=row["id"],
+            title=row["title"],
+            company=row["company"],
+            description=description,
+            location=row["location"],
+            source=row["source"],
+            embedding=embedding,
+        )

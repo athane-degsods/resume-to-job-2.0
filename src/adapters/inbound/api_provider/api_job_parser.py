@@ -53,5 +53,20 @@ class ApiJobParser:
 	def to_jobs_with_errors(self, payload: object) -> tuple[list[Job], list[dict]]:
 		return self._dataframe_parser.to_jobs_with_errors_from_records(self.to_records(payload))
 
+	def to_jobs_with_errors_from_records(
+		self,
+		records: Sequence[dict[str, object]],
+	) -> tuple[list[Job], list[dict]]:
+		return self._dataframe_parser.to_jobs_with_errors_from_records(records)
+
+	def limit_records(
+		self,
+		records: Sequence[dict[str, object]],
+		max_jobs: int,
+	) -> list[dict[str, object]]:
+		if max_jobs < 1:
+			raise ValueError("max_jobs must be at least 1.")
+		return list(records[:max_jobs])
+
 	def chunk_jobs(self, jobs: Sequence[Job], batch_size: int = 200) -> list[list[Job]]:
 		return self._dataframe_parser.chunk_jobs(jobs, batch_size=batch_size)

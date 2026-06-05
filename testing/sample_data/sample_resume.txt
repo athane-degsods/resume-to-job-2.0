@@ -1,0 +1,13 @@
+Jane Doe
+Machine Learning Engineer
+
+Summary
+- 5 years building NLP pipelines, ranking models, and MLOps workflows in Python.
+- Experience with PyTorch, scikit-learn, vector search, and deploying models to production.
+- Led projects on text classification, semantic search, and resume-to-job matching prototypes.
+
+Skills
+Python, SQL, Docker, Kubernetes, sentence-transformers, LLM APIs, data engineering, A/B testing.
+
+Experience
+ML Engineer at Nova AI — designed embedding-based job recommendation experiments and batch ingestion pipelines.
